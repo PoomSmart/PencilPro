@@ -1,6 +1,5 @@
 #define CHECK_TARGET
 #import "../PS.h"
-#import "../libsubstitrate/substitrate.h"
 #import <SpringBoard/SBApplicationController.h>
 #import <SpringBoard/SBDeviceApplicationSceneEntity.h>
 #import <SpringBoard/SBMainWorkspace.h>
@@ -121,8 +120,8 @@ CFIndex (*_IOHIDEventGetIntegerValue)(IOHIDEventRef, IOHIDEventField);
 
 %end
 
-bool (*_FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *);
-bool FBUIEventHasEdgePendingOrLocked(UITouchesEvent *event) {
+bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *);
+%hookf(bool, FBUIEventHasEdgePendingOrLocked, UITouchesEvent *event) {
 	IOHIDEventRef eventRef = [event _hidEvent];
 	if (eventRef == NULL)
 		return false;
@@ -242,7 +241,8 @@ void initPrefs(BOOL SB) {
 			_IOHIDEventGetIntegerValue = (CFIndex (*)(IOHIDEventRef, IOHIDEventField))dlsym(IOKit, "IOHIDEventGetIntegerValue");
 		}
 		if (IN_SPRINGBOARD) {
-			_PSHookFunctionCompat("/System/Library/PrivateFrameworks/FrontBoard.framework/FrontBoard", "__FBUIEventHasEdgePendingOrLocked", FBUIEventHasEdgePendingOrLocked);
+			MSImageRef fb = MSGetImageByName("/System/Library/PrivateFrameworks/FrontBoard.framework/FrontBoard");
+			FBUIEventHasEdgePendingOrLocked = (bool (*)(UITouchesEvent *))_PSFindSymbolCallable(fb, "__FBUIEventHasEdgePendingOrLocked");
 			%init(SpringBoard);
 			//_PSHookFunctionCompat("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", "_SBSSecureAppTypeForIdentifier", SBSSecureAppTypeForIdentifier);
 			//_PSHookFunctionCompat("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", "_SBSIdentifierForSecureAppType", SBSIdentifierForSecureAppType);
