@@ -6,7 +6,7 @@
 #import <SpringBoard/SBWorkspaceTransitionRequest.h>
 #import <UIKit/UIKit.h>
 #import <IOKit/hid/IOHIDEvent.h>
-#import <Cephei/HBPreferences.h>
+//#import <Cephei/HBPreferences.h>
 
 #define IOHIDEventFieldOffsetOf(field) (field & 0xffff)
 #define kIOHIDEventFieldDigitizerAuxiliaryPressure 0xB000B
@@ -19,10 +19,10 @@ typedef NS_ENUM(uint32_t, IOHIDDigitizerEventUpdateMask) {
     kIOHIDDigitizerEventUpdateDensityMask                   = 1<<IOHIDEventFieldOffsetOf(kIOHIDEventFieldDigitizerDensity),
 };
 
-HBPreferences *preferences;
+/*HBPreferences *preferences;
 NSString *tweakIdentifier = @"com.PS.PencilPro";
 BOOL enabled;
-NSString *quickNoteAppID = @"xyz.willy.Zebra";
+NSString *quickNoteAppID = @"xyz.willy.Zebra";*/
 
 @interface UIEvent (Private)
 - (IOHIDEventRef)_hidEvent;
@@ -120,7 +120,27 @@ CFIndex (*_IOHIDEventGetIntegerValue)(IOHIDEventRef, IOHIDEventField);
 
 %end
 
-bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *);
+%hook FBExclusiveTouchGestureRecognizer
+
+- (void)setMaximumAbsoluteAccumulatedMovement:(CGPoint)point {
+	%orig(point.x && point.y ? CGPointMake(500, 500) : point);
+}
+
+%end
+
+%hook SBSystemGestureManager
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gesture1 shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)gesture2 {
+	return NO;
+}
+
+%end
+
+%end
+
+%group FrontBoardFunction
+
+bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
 %hookf(bool, FBUIEventHasEdgePendingOrLocked, UITouchesEvent *event) {
 	IOHIDEventRef eventRef = [event _hidEvent];
 	if (eventRef == NULL)
@@ -150,26 +170,6 @@ bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *);
 	}
 	return true;
 }
-
-%hook FBExclusiveTouchGestureRecognizer
-
-- (void)setMaximumAbsoluteAccumulatedMovement:(CGPoint)point {
-	%orig(point.x && point.y ? CGPointMake(500, 500) : point);
-}
-
-%end
-
-%hook SBSystemGestureManager
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gesture1 shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)gesture2 {
-	return NO;
-}
-
-/*- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gesture1 shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)gesture2 {
-
-}*/
-
-%end
 
 %end
 
@@ -243,6 +243,9 @@ void initPrefs(BOOL SB) {
 		if (IN_SPRINGBOARD) {
 			MSImageRef fb = MSGetImageByName("/System/Library/PrivateFrameworks/FrontBoard.framework/FrontBoard");
 			FBUIEventHasEdgePendingOrLocked = (bool (*)(UITouchesEvent *))_PSFindSymbolCallable(fb, "__FBUIEventHasEdgePendingOrLocked");
+			if (FBUIEventHasEdgePendingOrLocked) {
+				%init(FrontBoardFunction);
+			}
 			%init(SpringBoard);
 			//_PSHookFunctionCompat("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", "_SBSSecureAppTypeForIdentifier", SBSSecureAppTypeForIdentifier);
 			//_PSHookFunctionCompat("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", "_SBSIdentifierForSecureAppType", SBSIdentifierForSecureAppType);
