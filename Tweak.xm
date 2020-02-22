@@ -1,5 +1,6 @@
 #define CHECK_TARGET
 #import "../PS.h"
+#import <SpringBoard/SBApplication.h>
 #import <SpringBoard/SBApplicationController.h>
 #import <SpringBoard/SBDeviceApplicationSceneEntity.h>
 #import <SpringBoard/SBMainWorkspace.h>
@@ -44,68 +45,41 @@ NSString *quickNoteAppID = @"xyz.willy.Zebra";*/
 - (void)setTrackedInteractions:(NSMutableSet *)arg1;
 @end
 
-@interface UIOpenURLAction : NSObject
-- (id)initWithURL:(NSURL *)url;
-@end
-
 @interface PNPChargingStatusView : UIView
 @property (assign,nonatomic) NSInteger chargingState; 
 - (void)beginPairing;
+@end
+
+@interface SBMainWorkspaceTransitionRequest : SBWorkspaceTransitionRequest
+@property (assign,nonatomic) NSInteger source;
 @end
 
 CFArrayRef (*_IOHIDEventGetChildren)(IOHIDEventRef);
 IOHIDEventType (*_IOHIDEventGetType)(IOHIDEventRef);
 CFIndex (*_IOHIDEventGetIntegerValue)(IOHIDEventRef, IOHIDEventField);
 
-/*
-73613	default	14:32:48.230762+0700	MobileNotes	39 Get type
-73613	default	14:32:48.231064+0700	MobileNotes	0 Get int 1
-73613	default	14:32:48.231132+0700	MobileNotes	2 Get int 2
-*/
+BOOL (*SBWorkspaceApplicationCanLaunchWhilePasscodeLocked)(SBApplication *app);
+void (*SBWorkspaceActivateApplicationFromURL)(NSURL *url, uint8_t arg2, void (^)(SBMainWorkspaceTransitionRequest *));
 
-/*%hook UIPencilEvent
+/*%group SBWorkspace
 
-- (void)_sendEventToInteractions {
-	IOHIDEventRef eventRef = [self _hidEvent];
-	NSLog(@"Pencil %u Get type", _IOHIDEventGetType(eventRef));
-	NSLog(@"Pencil %ld Get int 1", _IOHIDEventGetIntegerValue(eventRef, 0x270000));
-	NSLog(@"Pencil %ld Get int 2", _IOHIDEventGetIntegerValue(eventRef, 0x270001));
-	NSLog(@"Pencil %ld Get int 3", _IOHIDEventGetIntegerValue(eventRef, 0x270002));
-	%orig;
-}
-
-%end*/
-
-/*%hook LSApplicationWorkspace
-
-- (NSURL *)URLOverrideForURL:(NSURL *)url {
-	return %orig([url.absoluteString containsString:@"mobilenotes-quicknote"] ? [NSURL URLWithString:@"zbra://"] : url);
+%hookf(BOOL, SBWorkspaceApplicationCanLaunchWhilePasscodeLocked, SBApplication *app) {
+	return YES;
 }
 
 %end
 
-%hook UIOpenURLAction
+%hook SBDashBoardApplicationLauncher
 
-- (id)initWithURL:(NSURL *)url {
-	return %orig([url.absoluteString containsString:@"mobilenotes-quicknote"] ? [NSURL URLWithString:@"zbra://"] : url);
-}
-
-%end*/
-
-/*%hook SBDashBoardViewController
-
-- (void)launchQuickNote {
+- (void)_launchQuickNote {
 	NSLog(@"PencilPro: Quick Note App: %@", quickNoteAppID);
 	if (quickNoteAppID.length == 0) {
 		%orig;
 		return;
 	}
-	SBApplication *toApp = [(SBApplicationController *)[%c(SBApplicationController) sharedInstance] applicationWithBundleIdentifier:quickNoteAppID];
-	SBMainWorkspace *workspace = [%c(SBMainWorkspace) sharedInstance];
-    SBDeviceApplicationSceneEntity *app = [[%c(SBDeviceApplicationSceneEntity) alloc] initWithApplicationForMainDisplay:toApp];
-    SBWorkspaceTransitionRequest *request = [workspace createRequestForApplicationActivation:app options:0];
-    [workspace executeTransitionRequest:request];
-	[app release];
+	SBWorkspaceActivateApplicationFromURL([NSURL URLWithString:@"zbra://"], 0, ^(SBMainWorkspaceTransitionRequest *request) {
+		request.source = 13;
+	});
 }
 
 %end*/
@@ -120,10 +94,26 @@ CFIndex (*_IOHIDEventGetIntegerValue)(IOHIDEventRef, IOHIDEventField);
 
 %end
 
+%hook UIScreenEdgePanGestureRecognizer
+
++ (BOOL)_shouldSupportStylusTouches {
+	return YES;
+}
+
+%end
+
+%hook _UIExclusiveTouchGestureRecognizer
+
+- (void)setMaximumAbsoluteAccumulatedMovement:(CGPoint)point {
+	%orig(point.x && point.y ? CGPointMake(800, 800) : point);
+}
+
+%end
+
 %hook FBExclusiveTouchGestureRecognizer
 
 - (void)setMaximumAbsoluteAccumulatedMovement:(CGPoint)point {
-	%orig(point.x && point.y ? CGPointMake(500, 500) : point);
+	%orig(point.x && point.y ? CGPointMake(800, 800) : point);
 }
 
 %end
@@ -138,10 +128,7 @@ CFIndex (*_IOHIDEventGetIntegerValue)(IOHIDEventRef, IOHIDEventField);
 
 %end
 
-%group FrontBoardFunction
-
-bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
-%hookf(bool, FBUIEventHasEdgePendingOrLocked, UITouchesEvent *event) {
+bool hasEdgePendingOrLocked(UITouchesEvent *event) {
 	IOHIDEventRef eventRef = [event _hidEvent];
 	if (eventRef == NULL)
 		return false;
@@ -171,6 +158,22 @@ bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
 	return true;
 }
 
+%group UIKitFunction
+
+bool (*_UIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
+%hookf(bool, _UIEventHasEdgePendingOrLocked, UITouchesEvent *event) {
+	return hasEdgePendingOrLocked(event);
+}
+
+%end
+
+%group FrontBoardFunction
+
+bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
+%hookf(bool, FBUIEventHasEdgePendingOrLocked, UITouchesEvent *event) {
+	return hasEdgePendingOrLocked(event);
+}
+
 %end
 
 /*%hook _FBSystemGestureManager
@@ -185,25 +188,6 @@ bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
 }
 
 %end*/
-
-/*%hook SBInProcessSecureAppAction
-
-- (id)initWithType:(NSInteger)type applicationSceneEntity:(SBDeviceApplicationSceneEntity *)entity handler:(void *)handler {
-	NSLog(@"Pencil %ld %@", type, entity);
-	return %orig;
-}
-
-%end*/
-
-/*NSString *(*_SBSIdentifierForSecureAppType)(NSInteger type);
-NSString *SBSIdentifierForSecureAppType(NSInteger type) {
-	return type == 10 ? quickNoteAppID : _SBSIdentifierForSecureAppType(type);
-}
-
-NSInteger (*_SBSSecureAppTypeForIdentifier)(NSString *identifier);
-NSInteger SBSSecureAppTypeForIdentifier(NSString *identifier) {
-	return quickNoteAppID.length && [identifier isEqualToString:quickNoteAppID] ? 10 : _SBSSecureAppTypeForIdentifier(identifier);
-}*/
 
 %group SharingHUD
 
@@ -220,7 +204,6 @@ NSInteger SBSSecureAppTypeForIdentifier(NSString *identifier) {
 
 void initPrefs(BOOL SB) {
 	//dlopen("/Library/Frameworks/Cephei.framework/Cephei", RTLD_LAZY);
-	//NSLog(@"PencilPro: init(%d)", SB);
 	/*preferences = [[%c(HBPreferences) alloc] initWithIdentifier:tweakIdentifier];
     [preferences registerBool:&enabled default:YES forKey:@"enabled"];
 	if (SB) {
@@ -246,6 +229,17 @@ void initPrefs(BOOL SB) {
 			if (FBUIEventHasEdgePendingOrLocked) {
 				%init(FrontBoardFunction);
 			}
+			MSImageRef uc = MSGetImageByName("/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore");
+			_UIEventHasEdgePendingOrLocked = (bool (*)(UITouchesEvent *))_PSFindSymbolCallable(uc, "__UIEventHasEdgePendingOrLocked");
+			if (_UIEventHasEdgePendingOrLocked) {
+				%init(UIKitFunction);
+			}
+			/*MSImageRef sb = MSGetImageByName("/System/Library/PrivateFrameworks/SpringBoard.framework/SpringBoard");
+			SBWorkspaceActivateApplicationFromURL = (void (*)(NSURL *, uint8_t, void (^)(SBMainWorkspaceTransitionRequest *)))_PSFindSymbolCallable(sb, "_SBWorkspaceActivateApplicationFromURL");
+			SBWorkspaceApplicationCanLaunchWhilePasscodeLocked = (BOOL (*)(SBApplication *))_PSFindSymbolCallable(sb, "_SBWorkspaceApplicationCanLaunchWhilePasscodeLocked");
+			if (SBWorkspaceApplicationCanLaunchWhilePasscodeLocked) {
+				%init(SBWorkspace);
+			}*/
 			%init(SpringBoard);
 			//_PSHookFunctionCompat("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", "_SBSSecureAppTypeForIdentifier", SBSSecureAppTypeForIdentifier);
 			//_PSHookFunctionCompat("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", "_SBSIdentifierForSecureAppType", SBSIdentifierForSecureAppType);
