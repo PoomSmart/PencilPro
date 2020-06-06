@@ -53,14 +53,6 @@ CFIndex (*_IOHIDEventGetIntegerValue)(IOHIDEventRef, IOHIDEventField);
 
 %end
 
-%hook UIScreenEdgePanGestureRecognizer
-
-+ (BOOL)_shouldSupportStylusTouches {
-	return YES;
-}
-
-%end
-
 %hook _UIExclusiveTouchGestureRecognizer
 
 - (void)setMaximumAbsoluteAccumulatedMovement:(CGPoint)point {
@@ -145,6 +137,27 @@ bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
 }
 
 %end
+
+%end
+
+%hook UIPanGestureRecognizer
+
+- (void)setAllowedTouchTypes:(NSArray <NSNumber *> *)types {
+	if (types && types.count && ![types containsObject:@(UITouchTypePencil)]) {
+		NSMutableArray *finalTypes = [NSMutableArray arrayWithArray:types];
+		[finalTypes addObject:@(UITouchTypePencil)];
+		%orig(finalTypes);
+	} else
+		%orig(types);
+}
+
+%end
+
+%hook UIScreenEdgePanGestureRecognizer
+
++ (BOOL)_shouldSupportStylusTouches {
+	return YES;
+}
 
 %end
 
