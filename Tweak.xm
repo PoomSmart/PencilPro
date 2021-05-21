@@ -1,7 +1,9 @@
 #define CHECK_TARGET
 #import "../PS.h"
+#import <dlfcn.h>
 #import <UIKit/UIKit.h>
 #import <IOKit/hid/IOHIDEvent.h>
+#import <theos/IOSMacros.h>
 
 #define IOHIDEventFieldOffsetOf(field) (field & 0xffff)
 #define kIOHIDEventFieldDigitizerAuxiliaryPressure 0xB000B
