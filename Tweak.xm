@@ -55,22 +55,6 @@ CFIndex (*_IOHIDEventGetIntegerValue)(IOHIDEventRef, IOHIDEventField);
 
 %end
 
-%hook _UIExclusiveTouchGestureRecognizer
-
-- (void)setMaximumAbsoluteAccumulatedMovement:(CGPoint)point {
-	%orig(point.x && point.y ? CGPointMake(800, 800) : point);
-}
-
-%end
-
-%hook FBExclusiveTouchGestureRecognizer
-
-- (void)setMaximumAbsoluteAccumulatedMovement:(CGPoint)point {
-	%orig(point.x && point.y ? CGPointMake(800, 800) : point);
-}
-
-%end
-
 %hook SBSystemGestureManager
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gesture1 shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)gesture2 {
@@ -142,10 +126,14 @@ bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
 
 %end
 
+%group UIKit
+
+BOOL blacklistedApp = NO;
+
 %hook UIPanGestureRecognizer
 
 - (void)setAllowedTouchTypes:(NSArray <NSNumber *> *)types {
-	if (types && types.count && ![types containsObject:@(UITouchTypePencil)]) {
+	if (!blacklistedApp && types && types.count && ![types containsObject:@(UITouchTypePencil)]) {
 		NSMutableArray *finalTypes = [NSMutableArray arrayWithArray:types];
 		[finalTypes addObject:@(UITouchTypePencil)];
 		%orig(finalTypes);
@@ -163,8 +151,11 @@ bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
 
 %end
 
+%end
+
 %ctor {
-	if ([NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.Sharing.SharingHUDService"]) {
+	NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier;
+	if ([bundleIdentifier isEqualToString:@"com.apple.Sharing.SharingHUDService"]) {
 		dlopen("/System/Library/PrivateFrameworks/PencilPairingUI.framework/PencilPairingUI", RTLD_LAZY);
 		%init(SharingHUD);
 	}
@@ -177,17 +168,19 @@ bool (*FBUIEventHasEdgePendingOrLocked)(UITouchesEvent *) = NULL;
 		}
 		if (IN_SPRINGBOARD) {
 			MSImageRef fb = MSGetImageByName("/System/Library/PrivateFrameworks/FrontBoard.framework/FrontBoard");
-			FBUIEventHasEdgePendingOrLocked = (bool (*)(UITouchesEvent *))_PSFindSymbolCallable(fb, "__FBUIEventHasEdgePendingOrLocked");
+			FBUIEventHasEdgePendingOrLocked = (bool (*)(UITouchesEvent *))MSFindSymbol(fb, "__FBUIEventHasEdgePendingOrLocked");
 			if (FBUIEventHasEdgePendingOrLocked) {
 				%init(FrontBoardFunction);
 			}
 			MSImageRef uc = MSGetImageByName("/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore");
-			_UIEventHasEdgePendingOrLocked = (bool (*)(UITouchesEvent *))_PSFindSymbolCallable(uc, "__UIEventHasEdgePendingOrLocked");
+			_UIEventHasEdgePendingOrLocked = (bool (*)(UITouchesEvent *))MSFindSymbol(uc, "__UIEventHasEdgePendingOrLocked");
 			if (_UIEventHasEdgePendingOrLocked) {
 				%init(UIKitFunction);
 			}
 			%init(SpringBoard);
+		} else {
+			blacklistedApp = [bundleIdentifier isEqualToString:@"com.goodnotesapp.x"];
 		}
-		%init;
+		%init(UIKit);
 	}
 }
